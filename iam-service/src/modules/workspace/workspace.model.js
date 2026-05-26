@@ -1,5 +1,7 @@
 const mongoose = require('mongoose');
 
+const ROLES = ['admin', 'manager', 'member'];
+
 const workspaceSchema = new mongoose.Schema(
   {
     name: {
@@ -8,11 +10,11 @@ const workspaceSchema = new mongoose.Schema(
       trim:     true,
     },
     slug: {
-      type:     String,
-      required: true,
-      unique:   true,
+      type:      String,
+      required:  true,
+      unique:    true,
       lowercase: true,
-      trim:     true,
+      trim:      true,
     },
     description: {
       type:    String,
@@ -27,10 +29,9 @@ const workspaceSchema = new mongoose.Schema(
       type:    String,
       default: null,
     },
-    // Giới hạn dung lượng file (bytes), mặc định 5GB
     storageQuota: {
       type:    Number,
-      default: 5 * 1024 * 1024 * 1024,
+      default: 5 * 1024 * 1024 * 1024, // 5GB
     },
     storageUsed: {
       type:    Number,
@@ -53,4 +54,4 @@ workspaceSchema.index({ ownerId: 1 });
 
 const Workspace = mongoose.model('Workspace', workspaceSchema);
 
-module.exports = { Workspace };
+module.exports = { Workspace, ROLES };

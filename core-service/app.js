@@ -1,16 +1,16 @@
-const express       = require('express');
-const cors          = require('cors');
-const helmet        = require('helmet');
-const morgan        = require('morgan');
-const env           = require('./src/shared/config/environment');
+const express = require('express');
+const cors = require('cors');
+const helmet = require('helmet');
+const morgan = require('morgan');
+const env = require('./src/shared/config/environment');
 const trustedSource = require('./src/shared/middlewares/trustedSource.middleware');
-const errorHandler  = require('./src/shared/middlewares/errorHandler');
+const errorHandler = require('./src/shared/middlewares/errorHandler');
 
 // ── Routes ────────────────────────────────────────────────────────────────────
-const projectRoutes      = require('./src/modules/project/project.routes');
-const taskRoutes         = require('./src/modules/task/task.routes');
-const collaborationRoutes= require('./src/modules/collaboration/collaboration.routes');
-const attachmentRoutes   = require('./src/modules/attachment/attachment.routes');
+const projectRoutes = require('./src/modules/project/project.routes');
+const taskRoutes = require('./src/modules/task/task.routes');
+const collaborationRoutes = require('./src/modules/collaboration/collaboration.routes');
+const attachmentRoutes = require('./src/modules/attachment/attachment.routes');
 const notificationRoutes = require('./src/modules/notification/notification.routes');
 const { router: analyticsRoutes, registerEvents: registerAnalyticsEvents }
   = require('./src/modules/analytics/analytics.routes');
@@ -41,7 +41,11 @@ const createApp = () => {
   app.get('/health', (_, res) =>
     res.json({ success: true, service: 'core-service', status: 'UP' })
   );
-
+  app.use('/', (req, res, next) =>
+    console.log('Internal Secret:', req.headers['x-internal-secret']) ||
+    console.log('User ID:', req.headers['x-user-id']) ||
+    next()
+  );
   // ── Trust Gate ─────────────────────────────────────────────────────────────
   // Mọi request vào /core/** đều phải có x-user-id từ gateway
   app.use('/core', trustedSource);
@@ -55,12 +59,12 @@ const createApp = () => {
   //  /core/notifications/**
   //  /core/analytics/**
 
-  app.use('/core/projects',      projectRoutes);
-  app.use('/core/tasks',         taskRoutes);
+  app.use('/core/projects', projectRoutes);
+  app.use('/core/tasks', taskRoutes);
   app.use('/core/collaboration', collaborationRoutes);
-  app.use('/core/attachments',   attachmentRoutes);
+  app.use('/core/attachments', attachmentRoutes);
   app.use('/core/notifications', notificationRoutes);
-  app.use('/core/analytics',     analyticsRoutes);
+  app.use('/core/analytics', analyticsRoutes);
 
   // ── 404 ───────────────────────────────────────────────────────────────────
   app.use((req, res) =>

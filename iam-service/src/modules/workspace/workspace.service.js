@@ -1,6 +1,26 @@
-const workspaceRepo = require('./workspace.repository');
-const userRepo      = require('../user/user.repository');
-const AppError      = require('../../shared/utils/AppError');
+const workspaceRepo      = require('./workspace.repository');
+const memberRepo         = require('./workspace.member.repository');
+const userRepo           = require('../user/user.repository');
+const AppError           = require('../../shared/utils/AppError');
+const { invalidateMemberCache } = require('../../shared/utils/cacheInvalidator');
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const assertWorkspaceExists = async (id) => {
+  const ws = await workspaceRepo.findById(id);
+  if (!ws) throw new AppError('Workspace not found', 404);
+  return ws;
+};
+
+const assertMemberRole = async (userId, workspaceId, ...allowedRoles) => {
+  const member = await memberRepo.findMember(userId, workspaceId);
+  if (!member) throw new AppError('You are not a member of this workspace', 403);
+  if (!allowedRoles.includes(member.role))
+    throw new AppError('Forbidden: Insufficient workspace role', 403);
+  return member;
+};
+
+// ─── Workspace CRUD ───────────────────────────────────────────────────────────
 
 const createWorkspace = async (ownerId, data) => {
   const existing = await workspaceRepo.findBySlug(data.slug);
@@ -8,81 +28,123 @@ const createWorkspace = async (ownerId, data) => {
 
   const workspace = await workspaceRepo.create({ ...data, ownerId });
 
-  // Gán workspace cho owner và set role admin
-  await userRepo.updateById(ownerId, {
-    workspaceId: workspace._id,
-    role: 'admin',
-  });
+  await memberRepo.createMember(ownerId, workspace._id, 'admin');
 
   return workspace;
 };
 
-const getWorkspaceById = async (id) => {
-  const workspace = await workspaceRepo.findById(id);
-  if (!workspace) throw new AppError('Workspace not found', 404);
+const getWorkspaceById = async (requesterId, workspaceId) => {
+  const [workspace] = await Promise.all([
+    assertWorkspaceExists(workspaceId),
+    assertMemberRole(requesterId, workspaceId, 'admin', 'manager', 'member'),
+  ]);
   return workspace;
 };
 
-const getMyWorkspace = async (userId) => {
-  const user = await userRepo.findById(userId);
-  if (!user?.workspaceId) throw new AppError('You are not in any workspace', 404);
-  return workspaceRepo.findById(user.workspaceId);
+// Multi-workspace: trả về tất cả workspace user đang tham gia kèm role
+const getMyWorkspaces = async (userId) => {
+  const memberships = await memberRepo.findUserWorkspaces(userId);
+  return memberships.map((m) => ({
+    ...m.workspaceId.toJSON(),
+    role:     m.role,
+    joinedAt: m.joinedAt,
+  }));
 };
 
-const updateWorkspace = async (userId, userRole, workspaceId, data) => {
-  const workspace = await workspaceRepo.findById(workspaceId);
-  if (!workspace) throw new AppError('Workspace not found', 404);
+const updateWorkspace = async (requesterId, workspaceId, data) => {
+  const workspace = await assertWorkspaceExists(workspaceId);
+  const member    = await memberRepo.findMember(requesterId, workspaceId);
 
-  const isOwner = String(workspace.ownerId) === String(userId);
-  if (!isOwner && userRole !== 'admin') {
+  const isOwner = String(workspace.ownerId) === String(requesterId);
+  if (!isOwner && member?.role !== 'admin')
     throw new AppError('Forbidden: Only owner or admin can update workspace', 403);
-  }
 
   return workspaceRepo.updateById(workspaceId, data);
 };
 
-const addMember = async (requesterId, requesterRole, workspaceId, memberId) => {
-  if (requesterRole !== 'admin') {
-    throw new AppError('Forbidden: Only admin can add members', 403);
-  }
+// ─── Member management ────────────────────────────────────────────────────────
 
-  const [workspace, member] = await Promise.all([
-    workspaceRepo.findById(workspaceId),
-    userRepo.findById(memberId),
-  ]);
-
-  if (!workspace) throw new AppError('Workspace not found', 404);
-  if (!member)    throw new AppError('User not found', 404);
-  if (String(member.workspaceId) === String(workspaceId)) {
-    throw new AppError('User is already in this workspace', 409);
-  }
-
-  await userRepo.updateById(memberId, { workspaceId, role: 'member' });
-  return userRepo.findById(memberId);
+const getMembers = async (requesterId, workspaceId) => {
+  await assertMemberRole(requesterId, workspaceId, 'admin', 'manager', 'member');
+  return memberRepo.findMembers(workspaceId);
 };
 
-const removeMember = async (requesterId, requesterRole, workspaceId, memberId) => {
-  if (requesterRole !== 'admin') {
-    throw new AppError('Forbidden: Only admin can remove members', 403);
+const addMember = async (requesterId, workspaceId, targetUserId, role = 'member') => {
+  await assertMemberRole(requesterId, workspaceId, 'admin');
+  await assertWorkspaceExists(workspaceId);
+
+  const targetUser = await userRepo.findById(targetUserId);
+  if (!targetUser) throw new AppError('User not found', 404);
+  if (!targetUser.isActive) throw new AppError('User account is deactivated', 400);
+
+  const existing = await memberRepo.findMemberAny(targetUserId, workspaceId);
+  if (existing) {
+    if (existing.isActive)
+      throw new AppError('User is already a member of this workspace', 409);
+    const reactivated = await memberRepo.reactivateMember(targetUserId, workspaceId, role);
+    invalidateMemberCache(String(targetUserId), String(workspaceId));
+    return reactivated;
   }
-  if (String(requesterId) === String(memberId)) {
+
+  const member = await memberRepo.createMember(targetUserId, workspaceId, role);
+  invalidateMemberCache(String(targetUserId), String(workspaceId));
+  return member;
+};
+
+const removeMember = async (requesterId, workspaceId, targetUserId) => {
+  await assertMemberRole(requesterId, workspaceId, 'admin');
+
+  if (String(requesterId) === String(targetUserId))
     throw new AppError('Cannot remove yourself from workspace', 400);
-  }
 
-  const member = await userRepo.findById(memberId);
-  if (!member) throw new AppError('User not found', 404);
-  if (String(member.workspaceId) !== String(workspaceId)) {
-    throw new AppError('User is not in this workspace', 400);
-  }
+  const workspace = await assertWorkspaceExists(workspaceId);
+  if (String(workspace.ownerId) === String(targetUserId))
+    throw new AppError('Cannot remove the workspace owner', 400);
 
-  await userRepo.updateById(memberId, { workspaceId: null, role: 'member' });
+  const member = await memberRepo.findMember(targetUserId, workspaceId);
+  if (!member) throw new AppError('User is not a member of this workspace', 404);
+
+  await memberRepo.deactivateMember(targetUserId, workspaceId);
+  invalidateMemberCache(String(targetUserId), String(workspaceId));
+};
+
+const updateMemberRole = async (requesterId, workspaceId, targetUserId, newRole) => {
+  await assertMemberRole(requesterId, workspaceId, 'admin');
+
+  if (String(requesterId) === String(targetUserId))
+    throw new AppError('Cannot change your own role', 400);
+
+  const workspace = await assertWorkspaceExists(workspaceId);
+  if (String(workspace.ownerId) === String(targetUserId))
+    throw new AppError('Cannot change the role of workspace owner', 400);
+
+  const member = await memberRepo.findMember(targetUserId, workspaceId);
+  if (!member) throw new AppError('User is not a member of this workspace', 404);
+
+  const updated = await memberRepo.updateMemberRole(targetUserId, workspaceId, newRole);
+  invalidateMemberCache(String(targetUserId), String(workspaceId));
+  return updated;
+};
+
+// ─── Internal — dùng bởi gateway để populate cache ────────────────────────────
+const getMemberContext = async (userId, workspaceId) => {
+  const member = await memberRepo.findMember(userId, workspaceId);
+  if (!member) return null;
+  return {
+    workspaceId: member.workspaceId,
+    role:        member.role,
+    joinedAt:    member.joinedAt,
+  };
 };
 
 module.exports = {
   createWorkspace,
   getWorkspaceById,
-  getMyWorkspace,
+  getMyWorkspaces,
   updateWorkspace,
+  getMembers,
   addMember,
   removeMember,
+  updateMemberRole,
+  getMemberContext,
 };

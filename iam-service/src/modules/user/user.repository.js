@@ -18,17 +18,11 @@ const findByResetToken = (token) =>
     resetPasswordExpires: { $gt: Date.now() },
   }).select('+resetPasswordToken +resetPasswordExpires');
 
-const findByWorkspace = (workspaceId, query = {}) =>
-  User.find({ workspaceId, ...query });
-
 const create = (data) =>
   User.create(data);
 
 const updateById = (id, data) =>
   User.findByIdAndUpdate(id, data, { new: true, runValidators: true });
-
-const updateByEmail = (email, data) =>
-  User.findOneAndUpdate({ email }, data, { new: true });
 
 const deleteById = (id) =>
   User.findByIdAndDelete(id);
@@ -39,9 +33,7 @@ module.exports = {
   findByEmail,
   findByEmailWithPassword,
   findByResetToken,
-  findByWorkspace,
   create,
   updateById,
-  updateByEmail,
   deleteById,
 };

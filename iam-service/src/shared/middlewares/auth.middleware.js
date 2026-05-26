@@ -2,34 +2,28 @@ const { verifyAccessToken } = require('../utils/jwt.helper');
 const AppError              = require('../utils/AppError');
 
 /**
- * Verify JWT cho các route nội bộ của IAM cần bảo vệ.
- * (VD: GET /iam/users/me, PUT /iam/users/profile)
+ * Verify JWT cho các route nội bộ của IAM.
  *
- * Gateway đã verify trước, nhưng IAM verify lại để
- * defense-in-depth khi có request internal trực tiếp.
+ * Token chỉ chứa { userId } — không còn role hay workspaceId.
+ * Gateway inject x-user-id sau khi verify, các service khác
+ * dùng header đó thay vì decode lại token.
  */
 const authenticate = (req, res, next) => {
   try {
-    // Ưu tiên lấy từ header x-user-id do gateway inject
-    // nếu có → đã được gateway verify rồi, dùng luôn
+    // Gateway đã verify và inject x-user-id → dùng luôn
     if (req.headers['x-user-id']) {
-      req.user = {
-        userId:      req.headers['x-user-id'],
-        role:        req.headers['x-user-role']    || '',
-        workspaceId: req.headers['x-workspace-id'] || null,
-      };
+      req.user = { userId: req.headers['x-user-id'] };
       return next();
     }
 
-    // Fallback: verify JWT trực tiếp (internal / testing)
+    // Fallback: verify trực tiếp (internal / testing)
     const authHeader = req.headers['authorization'];
-    if (!authHeader?.startsWith('Bearer ')) {
+    if (!authHeader?.startsWith('Bearer '))
       throw new AppError('Unauthorized: Missing token', 401);
-    }
 
     const token   = authHeader.split(' ')[1];
     const payload = verifyAccessToken(token);
-    req.user      = payload;
+    req.user      = { userId: String(payload.userId) };
     next();
   } catch (err) {
     if (err.isOperational) return next(err);
@@ -37,15 +31,4 @@ const authenticate = (req, res, next) => {
   }
 };
 
-/**
- * Kiểm tra role. Dùng sau authenticate.
- * VD: authorize('admin', 'manager')
- */
-const authorize = (...roles) => (req, res, next) => {
-  if (!roles.includes(req.user?.role)) {
-    return next(new AppError('Forbidden: Insufficient permissions', 403));
-  }
-  next();
-};
-
-module.exports = { authenticate, authorize };
+module.exports = { authenticate };

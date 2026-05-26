@@ -1,5 +1,5 @@
 const http = require('../http/httpClient');
-const env  = require('../../shared/config/environment');
+const env = require('../../shared/config/environment');
 
 const BASE = env.IAM_SERVICE_URL;
 
@@ -14,8 +14,8 @@ const getProfile = (user) =>
 const getUserById = (userId, user) =>
   http.get(BASE, `/iam/users/${userId}`, user);
 
-const getWorkspaceMembers = (workspaceId, user) =>
-  http.get(BASE, `/iam/users/workspace/${workspaceId}/members`, user);
+const getWorkspaceMembers = (workspaceId) =>
+  http.get(BASE, `/iam/workspace/${workspaceId}/members`);
 
 const getMyWorkspace = (user) =>
   http.get(BASE, `/iam/workspaces/mine`, user);

@@ -39,8 +39,6 @@ app.get('/health', (_, res) =>
 //    GET    /iam/users/me
 //    PUT    /iam/users/me
 //    GET    /iam/users/:id
-//    GET    /iam/users/workspace/:workspaceId/members
-//    PATCH  /iam/users/:id/role
 //    PATCH  /iam/users/:id/deactivate
 //
 //  Workspaces:

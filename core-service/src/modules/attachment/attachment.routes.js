@@ -5,7 +5,7 @@ const response   = require('../../shared/utils/response');
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits:  { fileSize: 50 * 1024 * 1024 }, // 50MB max
+  limits:  { fileSize: 50 * 1024 * 1024 }, // 50MB
 });
 
 const router = Router();
@@ -18,7 +18,15 @@ router.get('/', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// POST /core/attachments  (multipart/form-data: file + targetId + targetType)
+// GET /core/attachments/storage — PHẢI đứng trước /:id tránh Express match 'storage' vào :id
+router.get('/storage', async (req, res, next) => {
+  try {
+    const used = await svc.getWorkspaceStorageUsed(req.user.workspaceId);
+    return response.ok(res, { usedBytes: used });
+  } catch (e) { next(e); }
+});
+
+// POST /core/attachments
 router.post('/', upload.single('file'), async (req, res, next) => {
   try {
     return response.created(res, await svc.uploadAttachment(req.user, req.file, req.body));
@@ -30,14 +38,6 @@ router.delete('/:id', async (req, res, next) => {
   try {
     await svc.deleteAttachment(req.user, req.params.id);
     return response.ok(res, null, 'Attachment deleted');
-  } catch (e) { next(e); }
-});
-
-// GET /core/attachments/storage — tổng dung lượng workspace
-router.get('/storage', async (req, res, next) => {
-  try {
-    const used = await svc.getWorkspaceStorageUsed(req.user.workspaceId);
-    return response.ok(res, { usedBytes: used });
   } catch (e) { next(e); }
 });
 

@@ -1,5 +1,5 @@
-const userRepo      = require('./user.repository');
-const AppError      = require('../../shared/utils/AppError');
+const userRepo = require('./user.repository');
+const AppError = require('../../shared/utils/AppError');
 
 const getMe = async (userId) => {
   const user = await userRepo.findById(userId);
@@ -19,43 +19,26 @@ const getUserById = async (id) => {
   return user;
 };
 
-const getWorkspaceMembers = async (workspaceId) =>
-  userRepo.findByWorkspace(workspaceId, { isActive: true });
+// ─── Deactivate ───────────────────────────────────────────────────────────────
 
-/**
- * Chỉ Admin mới được đổi role thành viên
- */
-const updateRole = async (requesterId, requesterRole, targetUserId, newRole) => {
-  if (requesterRole !== 'admin') {
-    throw new AppError('Forbidden: Only admin can change roles', 403);
-  }
-  if (String(requesterId) === String(targetUserId)) {
-    throw new AppError('Cannot change your own role', 400);
-  }
-
-  const user = await userRepo.updateById(targetUserId, { role: newRole });
-  if (!user) throw new AppError('User not found', 404);
-  return user;
-};
-
-const deactivateUser = async (requesterId, requesterRole, targetUserId) => {
-  if (requesterRole !== 'admin') {
-    throw new AppError('Forbidden: Only admin can deactivate users', 403);
-  }
-  if (String(requesterId) === String(targetUserId)) {
+const deactivateUser = async (requesterId, targetUserId) => {
+  // Không thể tự deactivate chính mình
+  if (String(requesterId) === String(targetUserId))
     throw new AppError('Cannot deactivate your own account', 400);
-  }
 
-  const user = await userRepo.updateById(targetUserId, { isActive: false });
-  if (!user) throw new AppError('User not found', 404);
-  return user;
+  const target = await userRepo.findById(targetUserId);
+  if (!target) throw new AppError('User not found', 404);
+
+  if (!target.isActive)
+    throw new AppError('User account is already deactivated', 409);
+
+  const updated = await userRepo.updateById(targetUserId, { isActive: false });
+  return updated;
 };
 
 module.exports = {
   getMe,
   updateProfile,
   getUserById,
-  getWorkspaceMembers,
-  updateRole,
   deactivateUser,
 };

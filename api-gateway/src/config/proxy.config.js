@@ -13,9 +13,11 @@ const SERVICE_REGISTRY = {
   },
   core: {
     url: env.CORE_SERVICE_URL,
+    pathRewrite: '/core',
   },
   bff: {
     url: env.BFF_SERVICE_URL,
+    pathRewrite: '/bff',
   },
 };
 

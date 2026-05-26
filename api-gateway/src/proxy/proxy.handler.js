@@ -1,30 +1,47 @@
 const { createProxyMiddleware } = require('http-proxy-middleware');
 
 /**
- * Tạo proxy middleware cho một service cụ thể.
+ * Tạo proxy middleware cho một downstream service.
  *
- * @param {string} targetUrl   - URL của downstream service
- * @param {string} prefix      - Tiền tố để thêm vào path
- * @returns Express middleware
+ * @param {string} targetUrl - URL của service
+ * @param {string} prefix    - Prefix thêm vào path sau khi rewrite
+ * @param {object} breaker   - CircuitBreaker instance (optional) để track lỗi thực tế
  */
-const createServiceProxy = (targetUrl, prefix = '') =>
+const createServiceProxy = (targetUrl, prefix = '', breaker = null) =>
   createProxyMiddleware({
     target: targetUrl,
     changeOrigin: true,
-    pathRewrite: (path, req) => {
-      return prefix + path;
-    },
+    pathRewrite: (path) => prefix + path,
 
     on: {
-      // Log mỗi request được proxy
       proxyReq: (proxyReq, req) => {
         console.log(`[PROXY] ${req.method} ${req.path} → ${targetUrl}${proxyReq.path}`);
+        if (req.headers['x-internal-secret']) {
+          proxyReq.setHeader('x-internal-secret', req.headers['x-internal-secret']);
+        }
+        if (req.headers['x-user-id']) {
+          proxyReq.setHeader('x-user-id', req.headers['x-user-id']);
+        }
+        if (req.headers['x-user-role']) {
+          proxyReq.setHeader('x-user-role', req.headers['x-user-role']);
+        }
+        if (req.headers['x-workspace-id']) {
+          proxyReq.setHeader('x-workspace-id', req.headers['x-workspace-id']);
+        }
       },
 
-      // Xử lý lỗi khi không kết nối được downstream service
+      // Track response status để circuit breaker phản ánh đúng thực tế
+      proxyRes: (proxyRes, req) => {
+        if (breaker && proxyRes.statusCode >= 500) {
+          breaker._onFailure();
+        } else if (breaker) {
+          breaker._onSuccess();
+        }
+      },
+
       error: (err, req, res) => {
         console.error(`[PROXY ERROR] ${req.method} ${req.path}`, err.message);
-
+        if (breaker) breaker._onFailure();
         if (!res.headersSent) {
           res.status(502).json({
             success: false,

@@ -1,7 +1,7 @@
 {
   "name": "api-gateway",
   "version": "1.0.0",
-  "description": "API Gateway - Proxy, Auth, Rate Limit, Routing",
+  "description": "API Gateway - Proxy, Auth, Rate Limit, Routing, Redis Cache",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -16,7 +16,8 @@
     "helmet": "^7.1.0",
     "http-proxy-middleware": "^3.0.0",
     "jsonwebtoken": "^9.0.2",
-    "morgan": "^1.10.0"
+    "morgan": "^1.10.0",
+    "redis": "^4.7.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.4"

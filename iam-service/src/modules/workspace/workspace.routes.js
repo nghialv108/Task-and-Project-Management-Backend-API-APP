@@ -1,25 +1,34 @@
-const { Router }       = require('express');
-const controller       = require('./workspace.controller');
-const validate         = require('../../shared/middlewares/validate.middleware');
+const { Router } = require('express');
+const controller = require('./workspace.controller');
 const { authenticate } = require('../../shared/middlewares/auth.middleware');
-const { createWorkspaceSchema, updateWorkspaceSchema } = require('../user/user.schema');
-const { z }            = require('zod');
+const { gatewayOnly } = require('../../shared/middlewares/internal.middleware');
+const validate = require('../../shared/middlewares/validate.middleware');
+const {
+  createWorkspaceSchema,
+  updateWorkspaceSchema,
+  addMemberSchema,
+  updateMemberRoleSchema,
+} = require('./workspace.schema');
 
 const router = Router();
 
+// ─── Internal routes — không qua user authenticate ────────────────────────────
+// Bảo vệ bằng x-internal-secret (gatewayOnly middleware)
+router.get('/internal/member-context', gatewayOnly, controller.getMemberContext);
+router.post('/internal/invalidate-cache', gatewayOnly, controller.invalidateMemberCache);
+
+// ─── User routes ──────────────────────────────────────────────────────────────
 router.use(authenticate);
 
-// ─── Workspace CRUD ───────────────────────────────────────────────────────────
-router.post('/',          validate(createWorkspaceSchema), controller.createWorkspace);
-router.get('/mine',       controller.getMyWorkspace);
-router.get('/:id',        controller.getWorkspaceById);
-router.put('/:id',        validate(updateWorkspaceSchema), controller.updateWorkspace);
+router.post('/', validate(createWorkspaceSchema), controller.createWorkspace);
+router.get('/mine', controller.getMyWorkspaces);
+router.get('/:id', controller.getWorkspaceById);
+router.put('/:id', validate(updateWorkspaceSchema), controller.updateWorkspace);
 
 // ─── Member management ────────────────────────────────────────────────────────
-router.post('/:id/members',
-  validate(z.object({ userId: z.string().min(1, 'userId is required') })),
-  controller.addMember,
-);
+router.get('/:id/members', controller.getMembers);
+router.post('/:id/members', validate(addMemberSchema), controller.addMember);
 router.delete('/:id/members/:memberId', controller.removeMember);
+router.patch('/:id/members/:memberId/role', validate(updateMemberRoleSchema), controller.updateMemberRole);
 
 module.exports = router;

@@ -1,24 +1,20 @@
-const { Router }       = require('express');
-const controller       = require('./user.controller');
-const validate         = require('../../shared/middlewares/validate.middleware');
-const { authenticate, authorize } = require('../../shared/middlewares/auth.middleware');
-const { updateProfileSchema, updateRoleSchema } = require('./user.schema');
+const { Router } = require('express');
+const controller = require('./user.controller');
+const validate = require('../../shared/middlewares/validate.middleware');
+const { authenticate } = require('../../shared/middlewares/auth.middleware');
+const { adminOnly } = require('../../shared/middlewares/adminOnly.middleware');
+const { updateProfileSchema } = require('./user.schema');
 
 const router = Router();
 
-// Tất cả user routes đều yêu cầu auth
 router.use(authenticate);
 
 // ─── Profile ──────────────────────────────────────────────────────────────────
-router.get('/me',         controller.getMe);
-router.put('/me',         validate(updateProfileSchema), controller.updateProfile);
+router.get('/me', controller.getMe);
+router.put('/me', validate(updateProfileSchema), controller.updateProfile);
+router.get('/:id', controller.getUserById);
 
-// ─── Workspace members ────────────────────────────────────────────────────────
-router.get('/workspace/:workspaceId/members', controller.getWorkspaceMembers);
-
-// ─── Admin operations ─────────────────────────────────────────────────────────
-router.get('/:id',                controller.getUserById);
-router.patch('/:id/role',         authorize('admin'), validate(updateRoleSchema), controller.updateRole);
-router.patch('/:id/deactivate',   authorize('admin'), controller.deactivateUser);
+// ─── Admin only ───────────────────────────────────────────────────────────────
+router.patch('/:id/deactivate', adminOnly, controller.deactivateUser);
 
 module.exports = router;

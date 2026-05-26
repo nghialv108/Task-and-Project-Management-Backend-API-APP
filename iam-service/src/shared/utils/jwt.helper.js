@@ -1,47 +1,32 @@
 const jwt = require('jsonwebtoken');
-const env  = require('../config/environment');
+const env = require('../config/environment');
 
 /**
- * Ký Access Token (ngắn hạn)
- * Payload chứa thông tin cần thiết cho downstream services
+ * Access Token — chứa userId + email (từ V2).
+ * workspaceId và role KHÔNG nằm trong token.
+ * Gateway resolve context qua Redis hoặc IAM mỗi request.
  */
 const signAccessToken = (payload) =>
   jwt.sign(payload, env.JWT_SECRET, { expiresIn: env.JWT_EXPIRES_IN });
 
 /**
- * Ký Refresh Token (dài hạn)
- * Chỉ chứa userId để giảm thiểu rủi ro nếu bị lộ
+ * Refresh Token — chỉ chứa userId để giảm rủi ro nếu bị lộ.
  */
 const signRefreshToken = (userId) =>
-  jwt.sign({ userId }, env.JWT_REFRESH_SECRET, {
-    expiresIn: env.JWT_REFRESH_EXPIRES_IN,
-  });
+  jwt.sign({ userId }, env.JWT_REFRESH_SECRET, { expiresIn: env.JWT_REFRESH_EXPIRES_IN });
+
+const verifyAccessToken  = (token) => jwt.verify(token, env.JWT_SECRET);
+const verifyRefreshToken = (token) => jwt.verify(token, env.JWT_REFRESH_SECRET);
 
 /**
- * Verify Access Token
- * @throws JsonWebTokenError | TokenExpiredError
- */
-const verifyAccessToken = (token) =>
-  jwt.verify(token, env.JWT_SECRET);
-
-/**
- * Verify Refresh Token
- * @throws JsonWebTokenError | TokenExpiredError
- */
-const verifyRefreshToken = (token) =>
-  jwt.verify(token, env.JWT_REFRESH_SECRET);
-
-/**
- * Tạo cặp token hoàn chỉnh từ user document
+ * Tạo cặp token từ user object.
+ * accessToken chứa userId + email; refreshToken chỉ chứa userId.
  */
 const generateTokenPair = (user) => {
   const payload = {
-    userId:      user._id,
-    email:       user.email,
-    role:        user.role,
-    workspaceId: user.workspaceId ?? null,
+    userId: user._id,
+    email:  user.email,
   };
-
   return {
     accessToken:  signAccessToken(payload),
     refreshToken: signRefreshToken(user._id),

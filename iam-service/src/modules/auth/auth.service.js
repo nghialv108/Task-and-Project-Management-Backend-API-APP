@@ -1,11 +1,11 @@
-const crypto = require('crypto');
-const userRepo = require('../user/user.repository');
-const { hash, compare } = require('../../shared/utils/hash');
+const crypto    = require('crypto');
+const userRepo  = require('../user/user.repository');
+const { hash, compare }           = require('../../shared/utils/hash');
 const { generateTokenPair,
-  verifyRefreshToken } = require('../../shared/utils/jwt.helper');
-const { sendResetPasswordEmail } = require('../../shared/utils/mailer');
-const AppError = require('../../shared/utils/AppError');
-const env = require('../../shared/config/environment');
+        verifyRefreshToken }       = require('../../shared/utils/jwt.helper');
+const { sendResetPasswordEmail }  = require('../../shared/utils/mailer');
+const AppError                    = require('../../shared/utils/AppError');
+const env                         = require('../../shared/config/environment');
 
 // ─── Register ─────────────────────────────────────────────────────────────────
 const register = async ({ fullName, email, password }) => {
@@ -13,11 +13,10 @@ const register = async ({ fullName, email, password }) => {
   if (existing) throw new AppError('Email already in use', 409);
 
   const hashedPassword = await hash(password);
-  const user = await userRepo.create({ fullName, email, password: hashedPassword });
+  const user           = await userRepo.create({ fullName, email, password: hashedPassword });
 
   const tokens = generateTokenPair(user);
 
-  // Lưu hash của refresh token để validate sau
   const rtHash = await hash(tokens.refreshToken);
   await userRepo.updateById(user._id, { refreshTokenHash: rtHash });
 
@@ -26,9 +25,8 @@ const register = async ({ fullName, email, password }) => {
 
 // ─── Login ────────────────────────────────────────────────────────────────────
 const login = async ({ email, password }) => {
-
   const user = await userRepo.findByEmailWithPassword(email);
-  if (!user) throw new AppError('Invalid email or password', 401);
+  if (!user)          throw new AppError('Invalid email or password', 401);
   if (!user.isActive) throw new AppError('Account has been deactivated', 403);
 
   const isMatch = await compare(password, user.password);
@@ -36,14 +34,12 @@ const login = async ({ email, password }) => {
 
   const tokens = generateTokenPair(user);
 
-  // Cập nhật refresh token hash + lastLoginAt
   const rtHash = await hash(tokens.refreshToken);
   await userRepo.updateById(user._id, {
     refreshTokenHash: rtHash,
-    lastLoginAt: new Date(),
+    lastLoginAt:      new Date(),
   });
 
-  // Lấy lại user sạch (không có password)
   const cleanUser = await userRepo.findById(user._id);
   return { user: cleanUser, ...tokens };
 };
@@ -58,9 +54,8 @@ const refreshToken = async (token) => {
   }
 
   const user = await userRepo.findByIdWithPassword(payload.userId);
-  if (!user || !user.refreshTokenHash) {
+  if (!user || !user.refreshTokenHash)
     throw new AppError('Invalid refresh token', 401);
-  }
 
   const isValid = await compare(token, user.refreshTokenHash);
   if (!isValid) throw new AppError('Invalid refresh token', 401);
@@ -74,22 +69,19 @@ const refreshToken = async (token) => {
 
 // ─── Logout ───────────────────────────────────────────────────────────────────
 const logout = async (userId) => {
-  // Xóa refresh token hash → token cũ không dùng được nữa
   await userRepo.updateById(userId, { refreshTokenHash: null });
 };
 
 // ─── Forgot Password ──────────────────────────────────────────────────────────
 const forgotPassword = async (email) => {
   const user = await userRepo.findByEmail(email);
-
-  // Không tiết lộ email có tồn tại hay không (security best practice)
-  if (!user) return;
+  if (!user) return; // không tiết lộ email có tồn tại hay không
 
   const resetToken = crypto.randomBytes(32).toString('hex');
-  const expires = new Date(Date.now() + 15 * 60 * 1000); // 15 phút
+  const expires    = new Date(Date.now() + 15 * 60 * 1000); // 15 phút
 
   await userRepo.updateById(user._id, {
-    resetPasswordToken: resetToken,
+    resetPasswordToken:   resetToken,
     resetPasswordExpires: expires,
   });
 
@@ -104,10 +96,10 @@ const resetPassword = async ({ token, password }) => {
 
   const hashedPassword = await hash(password);
   await userRepo.updateById(user._id, {
-    password: hashedPassword,
-    resetPasswordToken: null,
+    password:             hashedPassword,
+    resetPasswordToken:   null,
     resetPasswordExpires: null,
-    refreshTokenHash: null, // Force logout tất cả thiết bị
+    refreshTokenHash:     null, // force logout tất cả thiết bị
   });
 };
 
@@ -121,8 +113,8 @@ const changePassword = async (userId, { currentPassword, newPassword }) => {
 
   const hashedPassword = await hash(newPassword);
   await userRepo.updateById(userId, {
-    password: hashedPassword,
-    refreshTokenHash: null, // Force logout tất cả thiết bị
+    password:         hashedPassword,
+    refreshTokenHash: null, // force logout
   });
 };
 
